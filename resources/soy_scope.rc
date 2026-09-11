@@ -1,0 +1,4 @@
+#include "resource.h"
+
+IDR_SOYJAK_WEBP RCDATA "../assets/two-soyjaks-pointing.webp"
+IDI_SOYSCOPE_ICON ICON "../assets/soyscope.ico"

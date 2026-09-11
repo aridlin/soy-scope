@@ -1,0 +1,28 @@
+name: Windows build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Stage portable app
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item build/Release/soy_scope.exe package/
+          Copy-Item launchers/*.cmd package/
+          Copy-Item README.md, THIRD_PARTY_NOTICES.md, CHANGELOG.md, soy-scope.example.ini package/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: soy-scope-windows-x64
+          path: package/

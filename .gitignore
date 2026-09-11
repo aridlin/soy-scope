@@ -1,0 +1,12 @@
+build/
+dist/
+package/
+out/
+*.user
+*.suo
+*.vcxproj*
+*.sln
+*.exe
+*.pdb
+*.ilk
+soy-scope.ini
