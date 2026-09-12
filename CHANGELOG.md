@@ -2,6 +2,11 @@
 
 ## 2026.09.12
 
+- Added optional Medal shortcut forwarding: mark every aim, use a separate key, or enable both.
+- Persist Medal preferences and configurable manual/Medal shortcuts; markers default off.
+- Prevent shortcut collisions, wait for unrelated held modifiers, and release injected keys on disable or exit.
+- Added deterministic input/configuration regression tests; actual Medal receipt still requires Windows runtime validation.
+
 - Added a checkbox to replace right-click with left, middle, or either side mouse button in GUI and TUI setup.
 - Save the alternate-button preference in the INI; existing configurations keep right-click.
 - Cancel pending display and hide the overlay when changing trigger buttons.

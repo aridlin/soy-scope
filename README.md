@@ -54,6 +54,21 @@ Unchecking **Use a different mouse button** restores right-click. Changing the t
 
 See [`soy-scope.example.ini`](soy-scope.example.ini) for the configuration format. Copy it to `soy-scope.ini` to configure the app by hand.
 
+## Optional Medal markers
+
+Check **Enable Medal markers**, then choose either or both:
+
+- **Mark every aim** sends one shortcut when the overlay appears after its delay. A short aim that ends before the delay, and the **Show if armed** preview, do not create markers.
+- **Mark with a separate key** uses **F9** by default. It works even when the overlay is disarmed or its trigger is disabled; holding the key does not repeat markers.
+
+Set **Medal clip/bookmark shortcut** to match Medal's recording settings. Soyscope defaults this to **F10**, so set Medal's shortcut to F10 too, or choose another matching shortcut. Keep the base keys for the overlay toggle (F8), manual marker (F9), and Medal shortcut (F10) distinct. Modifier combinations such as `Ctrl+Alt+M` are supported. Settings are saved with the other preferences; existing configurations leave Medal markers off.
+
+Use Medal's **Long Recording** mode for timeline bookmarks. In clip mode the same shortcut saves a clip instead. See [Medal's bookmark documentation](https://support.medal.tv/support/solutions/articles/48001159728).
+
+This integration sends a Windows keyboard shortcut, not a confirmed Medal API event. The status reports whether Windows accepted the input; it cannot confirm Medal received it. Medal must be running and recording, and simulated-input compatibility has not been verified against Medal on Windows. The shortcut also reaches the foreground application, so use a binding that does not perform an unwanted game action. Windows can block input to applications running with higher privileges.
+
+Soyscope waits up to two seconds for unrelated held modifiers or the target key to be released, then skips that marker if they remain held. Requests arriving while a marker is queued or its 50 ms keypress is in progress are combined into that marker. Changing these settings cancels pending markers and releases injected keys.
+
 ## Build from source
 
 Requires Windows x64, CMake 3.20+, Visual Studio 2022 Build Tools with **Desktop development with C++**, and a Windows SDK.
@@ -67,6 +82,16 @@ cmake --build build --config Release --parallel
 ```
 
 The app uses C++17, Win32, Direct3D 11, DirectComposition, Direct2D, and Windows Imaging Component. The MSVC runtime is linked statically. FT is vendored, so no package manager or separate UI-library download is needed. GitHub Actions builds the Windows executable on pushes and pull requests.
+
+## Input logic tests
+
+On Linux with Python 3 and a C++17 compiler:
+
+```sh
+python3 tests/test_medal.py
+```
+
+These tests run the production configuration parser and Medal state machine against deterministic Win32 input stubs. They cover modes, persistence, shortcut conflicts, cancellation, held modifiers, key release, and input failures. GitHub Actions runs them alongside the native Windows build. They do not verify Medal receiving bookmarks or physical input.
 
 ## How it works
 

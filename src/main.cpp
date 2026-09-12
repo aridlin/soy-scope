@@ -31,6 +31,7 @@ constexpr UINT kMsgShowNow = WM_APP + 2;
 constexpr UINT kMsgHide = WM_APP + 3;
 constexpr UINT_PTR kShowTimer = 42;
 constexpr UINT_PTR kMousePollTimer = 43;
+constexpr UINT_PTR kMedalPollTimer = 44;
 constexpr int kHotkeyId = 1001;
 constexpr const char* kEmbeddedImagePath = "embedded://two-soyjaks-pointing";
 
@@ -54,6 +55,11 @@ struct AppConfig {
     bool enabled = true;
     bool custom_mouse_button = false;
     int mouse_button = 0;
+    bool medal_enabled = false;
+    bool medal_every_aim = true;
+    bool medal_separate_key = false;
+    std::string medal_marker_key = "F9";
+    std::string medal_target_key = "F10";
 };
 
 UINT trigger_button(const AppConfig& cfg) {
@@ -78,7 +84,12 @@ bool same_config(const AppConfig& a, const AppConfig& b) {
            nearly_equal(a.anchor_y_pct, b.anchor_y_pct) &&
            a.enabled == b.enabled &&
            a.custom_mouse_button == b.custom_mouse_button &&
-           a.mouse_button == b.mouse_button;
+           a.mouse_button == b.mouse_button &&
+           a.medal_enabled == b.medal_enabled &&
+           a.medal_every_aim == b.medal_every_aim &&
+           a.medal_separate_key == b.medal_separate_key &&
+           a.medal_marker_key == b.medal_marker_key &&
+           a.medal_target_key == b.medal_target_key;
 }
 
 std::string trim(std::string s) {
@@ -116,7 +127,8 @@ bool parse_key_token(const std::string& token, UINT* vk) {
             return true;
         }
     }
-    if (token.size() >= 2 && token[0] == 'F') {
+    if (token.size() >= 2 && token[0] == 'F' &&
+        std::all_of(token.begin() + 1, token.end(), [](unsigned char c) { return std::isdigit(c) != 0; }) && token.size() <= 3) {
         int n = std::atoi(token.c_str() + 1);
         if (n >= 1 && n <= 24) {
             *vk = VK_F1 + (UINT)n - 1;
@@ -172,6 +184,137 @@ Hotkey parse_hotkey(const std::string& text) {
     result.valid = saw_key;
     return result;
 }
+
+// Runs on the overlay thread. This sends Medal's configured shortcut; it does
+// not register or consume that shortcut, nor claim Medal saved a bookmark.
+class MedalMarkers {
+public:
+    void configure(const AppConfig& cfg) {
+        if (configured_ && cfg.medal_enabled == cfg_.medal_enabled &&
+            cfg.medal_every_aim == cfg_.medal_every_aim &&
+            cfg.medal_separate_key == cfg_.medal_separate_key &&
+            cfg.medal_marker_key == cfg_.medal_marker_key &&
+            cfg.medal_target_key == cfg_.medal_target_key &&
+            cfg.hotkey_text == cfg_.hotkey_text) return;
+        stop();
+        cfg_ = cfg;
+        configured_ = true;
+        target_ = parse_hotkey(cfg.medal_target_key);
+        manual_ = parse_hotkey(cfg.medal_marker_key);
+        const Hotkey arm = parse_hotkey(cfg.hotkey_text);
+        valid_ = false;
+        if (!cfg.medal_enabled) { status_ = "Medal markers off."; return; }
+        if (!cfg.medal_every_aim && !cfg.medal_separate_key) {
+            status_ = "Medal: enable every aim, separate key, or both."; return;
+        }
+        if (!target_.valid || (cfg.medal_separate_key && !manual_.valid)) {
+            status_ = "Medal: invalid shortcut. Examples: F10, Ctrl+Alt+M."; return;
+        }
+        // Compare base keys too: held modifiers must never route injected input
+        // back into Soyscope's arm or manual-marker binding.
+        if ((arm.valid && target_.vk == arm.vk) ||
+            (cfg.medal_separate_key && (manual_.vk == target_.vk ||
+             (arm.valid && manual_.vk == arm.vk)))) {
+            status_ = "Medal: arm, manual marker, and Medal shortcut need different base keys."; return;
+        }
+        valid_ = true;
+        manual_was_down_ = key_down(manual_.vk);
+        status_ = "Medal ready. Match the Medal shortcut in Medal's recording settings.";
+    }
+
+    void aim() {
+        if (cfg_.medal_every_aim) request();
+    }
+
+    void tick() {
+        const ULONGLONG now = GetTickCount64();
+        if (!release_.empty() && now >= release_at_) release_keys();
+        if (!valid_) return;
+        if (cfg_.medal_separate_key) {
+            const bool down = key_down(manual_.vk);
+            if (down && !manual_was_down_ && modifiers_down() == (manual_.modifiers & ~MOD_NOREPEAT)) request();
+            manual_was_down_ = down;
+        }
+        if (!pending_ || !release_.empty()) return;
+        if (now >= expires_at_) {
+            pending_ = false;
+            status_ = "Medal marker skipped: shortcut keys stayed held for 2 seconds.";
+            return;
+        }
+        // Wait for unrelated modifiers instead of releasing the user's keys.
+        const UINT held = modifiers_down();
+        const UINT wanted = target_.modifiers & ~MOD_NOREPEAT;
+        if ((held & ~wanted) || key_down(target_.vk)) return;
+        std::vector<INPUT> press;
+        auto add = [&](UINT vk) {
+            INPUT input{};
+            input.type = INPUT_KEYBOARD;
+            input.ki.wVk = (WORD)vk;
+            if (vk == VK_LWIN || vk == VK_INSERT || vk == VK_DELETE ||
+                vk == VK_HOME || vk == VK_END || vk == VK_PRIOR || vk == VK_NEXT ||
+                vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT)
+                input.ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
+            press.push_back(input);
+        };
+        if ((wanted & MOD_CONTROL) && !(held & MOD_CONTROL)) add(VK_CONTROL);
+        if ((wanted & MOD_ALT) && !(held & MOD_ALT)) add(VK_MENU);
+        if ((wanted & MOD_SHIFT) && !(held & MOD_SHIFT)) add(VK_SHIFT);
+        if ((wanted & MOD_WIN) && !(held & MOD_WIN)) add(VK_LWIN);
+        add(target_.vk);
+        const UINT sent = SendInput((UINT)press.size(), press.data(), sizeof(INPUT));
+        for (UINT i = sent; i > 0; --i) {
+            INPUT up = press[i - 1];
+            up.ki.dwFlags |= KEYEVENTF_KEYUP;
+            release_.push_back(up);
+        }
+        pending_ = false;
+        release_at_ = now + 50;
+        if (sent != press.size()) {
+            release_keys();
+            status_ = "Medal shortcut blocked by Windows. Check app privilege levels.";
+        } else {
+            status_ = "Medal shortcut sent (" + cfg_.medal_target_key + "). Check Medal for the bookmark.";
+        }
+    }
+
+    void stop() {
+        pending_ = false;
+        valid_ = false;
+        release_keys();
+    }
+
+    const std::string& status() const { return status_; }
+
+private:
+    static bool key_down(UINT vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+    static UINT modifiers_down() {
+        return (key_down(VK_CONTROL) ? MOD_CONTROL : 0) |
+               (key_down(VK_MENU) ? MOD_ALT : 0) |
+               (key_down(VK_SHIFT) ? MOD_SHIFT : 0) |
+               ((key_down(VK_LWIN) || key_down(VK_RWIN)) ? MOD_WIN : 0);
+    }
+    void request() {
+        if (!valid_ || pending_ || !release_.empty()) return;
+        pending_ = true;
+        expires_at_ = GetTickCount64() + 2000;
+        status_ = "Medal marker queued.";
+    }
+    void release_keys() {
+        if (release_.empty()) return;
+        const UINT sent = SendInput((UINT)release_.size(), release_.data(), sizeof(INPUT));
+        release_.erase(release_.begin(), release_.begin() + sent);
+        if (!release_.empty()) status_ = "Medal shortcut key release blocked by Windows.";
+    }
+    AppConfig cfg_;
+    Hotkey target_, manual_;
+    bool configured_ = false;
+    bool valid_ = false;
+    bool manual_was_down_ = false;
+    bool pending_ = false;
+    ULONGLONG expires_at_ = 0, release_at_ = 0;
+    std::vector<INPUT> release_;
+    std::string status_ = "Medal markers off.";
+};
 
 std::wstring utf8_to_wide(const std::string& s) {
     if (s.empty()) return {};
@@ -232,6 +375,11 @@ void read_config(AppConfig* cfg) {
             else if (key == "anchor_y_pct") cfg->anchor_y_pct = std::stof(val);
             else if (key == "custom_mouse_button") cfg->custom_mouse_button = (val == "1" || upper(val) == "TRUE");
             else if (key == "mouse_button") cfg->mouse_button = std::clamp(std::stoi(val), 0, 3);
+            else if (key == "medal_enabled") cfg->medal_enabled = (val == "1" || upper(val) == "TRUE");
+            else if (key == "medal_every_aim") cfg->medal_every_aim = (val == "1" || upper(val) == "TRUE");
+            else if (key == "medal_separate_key") cfg->medal_separate_key = (val == "1" || upper(val) == "TRUE");
+            else if (key == "medal_marker_key") cfg->medal_marker_key = val;
+            else if (key == "medal_target_key") cfg->medal_target_key = val;
             else if (key == "enabled") cfg->enabled = (val == "1" || upper(val) == "TRUE");
         } catch (...) {
         }
@@ -250,6 +398,11 @@ void write_config(const AppConfig& cfg) {
     out << "anchor_y_pct=" << cfg.anchor_y_pct << "\n";
     out << "custom_mouse_button=" << (cfg.custom_mouse_button ? 1 : 0) << "\n";
     out << "mouse_button=" << cfg.mouse_button << "\n";
+    out << "medal_enabled=" << (cfg.medal_enabled ? 1 : 0) << "\n";
+    out << "medal_every_aim=" << (cfg.medal_every_aim ? 1 : 0) << "\n";
+    out << "medal_separate_key=" << (cfg.medal_separate_key ? 1 : 0) << "\n";
+    out << "medal_marker_key=" << cfg.medal_marker_key << "\n";
+    out << "medal_target_key=" << cfg.medal_target_key << "\n";
     out << "enabled=" << (cfg.enabled ? 1 : 0) << "\n";
 }
 
@@ -315,6 +468,11 @@ public:
         if (hwnd) PostMessageW(hwnd, kMsgHide, 0, 0);
     }
 
+    std::string medal_status() const {
+        std::lock_guard<std::mutex> lock(status_mutex_);
+        return medal_status_;
+    }
+
     std::string status() const {
         std::lock_guard<std::mutex> lock(status_mutex_);
         return status_;
@@ -348,12 +506,17 @@ private:
                 if (!self->pending_show_) return 0;
                 KillTimer(hwnd, kShowTimer);
                 self->pending_show_ = false;
-                if (self->armed_ && self->trigger_button_down()) self->show_overlay();
+                if (self->armed_ && self->trigger_button_down()) self->show_overlay(true);
             } else if (wp == kMousePollTimer) {
                 self->poll_trigger_button();
+            } else if (wp == kMedalPollTimer) {
+                self->medal_.tick();
+                self->update_medal_status();
             }
             return 0;
         case WM_CLOSE:
+            self->medal_.stop();
+            KillTimer(hwnd, kMedalPollTimer);
             self->unregister_hotkey();
             KillTimer(hwnd, kShowTimer);
             KillTimer(hwnd, kMousePollTimer);
@@ -638,6 +801,10 @@ private:
             // Require a fresh press after rebinding, including clicks in setup.
             trigger_was_down_ = trigger_button_down();
         }
+        medal_.configure(active_config_);
+        // Keep ticking to finish key-up events even if markers were disabled.
+        SetTimer(control_hwnd_.load(), kMedalPollTimer, 10, nullptr);
+        update_medal_status();
         Hotkey hk = parse_hotkey(active_config_.hotkey_text);
         if (active_config_.enabled && hk.valid) {
             register_hotkey(hk);
@@ -735,7 +902,7 @@ private:
         if (visible_ || pending_show_) return;
         int delay = std::max(0, (int)std::round(active_config_.delay_ms));
         if (delay == 0) {
-            show_overlay();
+            show_overlay(true);
         } else {
             pending_show_ = true;
             SetTimer(control_hwnd_.load(), kShowTimer, (UINT)delay, nullptr);
@@ -1033,14 +1200,21 @@ private:
         visible_ = false;
     }
 
-    void show_overlay() {
+    void update_medal_status() {
+        std::lock_guard<std::mutex> lock(status_mutex_);
+        medal_status_ = medal_.status();
+    }
+
+    void show_overlay(bool from_aim = false) {
         if (!overlay_hwnd_ || !active_config_.enabled || !armed_) return;
         if (bitmap_dirty_ || surface_dirty_ || !overlay_primed_) {
             if (!prime_overlay_surface()) return;
         }
         if (!set_scope_opacity(configured_overlay_opacity())) return;
+        const bool newly_visible = !visible_;
         visible_ = true;
         pending_show_ = false;
+        if (from_aim && newly_visible) medal_.aim();
     }
     mutable std::mutex config_mutex_;
     AppConfig pending_config_;
@@ -1048,6 +1222,8 @@ private:
 
     mutable std::mutex status_mutex_;
     std::string status_ = "Starting overlay thread...";
+    MedalMarkers medal_;
+    std::string medal_status_;
 
     std::thread thread_;
     std::atomic<HWND> control_hwnd_{nullptr};
@@ -1152,8 +1328,12 @@ int main(int argc, char** argv) {
 
     char image_path[1024]{};
     char hotkey[96]{};
+    char medal_marker_key[96]{};
+    char medal_target_key[96]{};
     copy_to_buffer(image_path, sizeof(image_path), cfg.image_path);
     copy_to_buffer(hotkey, sizeof(hotkey), cfg.hotkey_text);
+    copy_to_buffer(medal_marker_key, sizeof(medal_marker_key), cfg.medal_marker_key);
+    copy_to_buffer(medal_target_key, sizeof(medal_target_key), cfg.medal_target_key);
 
     AppConfig last_sent = cfg;
     std::string last_saved_status;
@@ -1210,6 +1390,22 @@ int main(int argc, char** argv) {
         if (ft::input("Hotkey", hotkey, sizeof(hotkey), ft::InputFlags::CharsNoBlank)) {
             cfg.hotkey_text = hotkey;
             dirty = true;
+        }
+
+        dirty |= ft::checkbox("Enable Medal markers", &cfg.medal_enabled);
+        if (cfg.medal_enabled) {
+            dirty |= ft::checkbox("Mark every aim (when overlay appears)", &cfg.medal_every_aim);
+            dirty |= ft::checkbox("Mark with a separate key", &cfg.medal_separate_key);
+            if (cfg.medal_separate_key && ft::input("Manual marker key", medal_marker_key, sizeof(medal_marker_key), ft::InputFlags::CharsNoBlank)) {
+                cfg.medal_marker_key = medal_marker_key;
+                dirty = true;
+            }
+            if (ft::input("Medal clip/bookmark shortcut", medal_target_key, sizeof(medal_target_key), ft::InputFlags::CharsNoBlank)) {
+                cfg.medal_target_key = medal_target_key;
+                dirty = true;
+            }
+            ft::text_wrapped("Set the same shortcut in Medal. Long Recording makes bookmarks; clip mode saves clips. Both marker modes can be enabled.");
+            ft::text_wrapped(overlay.medal_status().c_str());
         }
 
         dirty |= ft::slider_float("Delay before show (ms)", &cfg.delay_ms, 0.0f, 3000.0f);
