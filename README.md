@@ -2,7 +2,7 @@
 
 <p align="center"><img src="assets/soyscope-icon.png" alt="Soy Scope icon" width="160"></p>
 
-A portable Windows overlay that puts the pointing soyjak's fingertip on your crosshair. Press **F8** to arm it, hold **right click** to show it after a short delay, and release right click to hide it.
+A portable Windows overlay that puts the pointing soyjak's fingertip on your crosshair. Press **F8** to arm it, hold **right click** to show it after a short delay, and release right click to hide it. Enable **Use a different mouse button** in setup to use left click, middle click, or either side button instead.
 
 The overlay is transparent, click-through, and positioned relative to the center of your primary display. The image and application icon are embedded in the executable.
 
@@ -16,7 +16,7 @@ The overlay is transparent, click-through, and positioned relative to the center
 4. Hold the right mouse button. The overlay appears after **250 ms**; releasing the button hides it immediately.
 5. Press **F8** again to disarm it.
 
-Use the setup window to change the image, hotkey, delay, size, opacity, or fingertip anchor. Settings apply while the app runs. **Save config** writes them to `soy-scope.ini` beside the executable; closing the app also saves them.
+Use the setup window to change the image, hotkey, trigger button, delay, size, opacity, or fingertip anchor. Settings apply while the app runs. **Save config** writes them to `soy-scope.ini` beside the executable; closing the app also saves them.
 
 ## GUI and TUI
 
@@ -36,7 +36,8 @@ The release includes launchers for both. The TUI changes the setup interface; th
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| Hotkey | `F8` | Toggle the right-click trigger |
+| Hotkey | `F8` | Toggle the selected mouse trigger |
+| Trigger button | Right mouse button | Check **Use a different mouse button** and select left, middle, X1, or X2 |
 | Delay | `250 ms` | Wait before showing the overlay |
 | Width | `1200 px` | Scale the overlay image |
 | Opacity | `0.72` | Set overlay transparency |
@@ -48,6 +49,8 @@ The release includes launchers for both. The TUI changes the setup interface; th
 - **Show if armed** previews the overlay when armed; **Hide** hides it.
 - **Reset anchor** restores the default fingertip position.
 - Hotkey examples: `F8`, `Ctrl+Alt+S`, `Shift+F9`. Choose another key if another app owns the hotkey.
+
+Unchecking **Use a different mouse button** restores right-click. Changing the trigger hides the overlay and cancels its pending delay; release and press the newly selected button to use it. The checkbox and button choice are saved with the other settings.
 
 See [`soy-scope.example.ini`](soy-scope.example.ini) for the configuration format. Copy it to `soy-scope.ini` to configure the app by hand.
 
@@ -67,7 +70,7 @@ The app uses C++17, Win32, Direct3D 11, DirectComposition, Direct2D, and Windows
 
 ## How it works
 
-The setup interface sends settings to a separate overlay controller. A global hotkey arms the trigger, mouse-button polling detects right-click state, and a timer handles the delay. The image is prepared ahead of display; DirectComposition controls its visibility and opacity. This is a desktop overlay with no game-specific integration.
+The setup interface sends settings to a separate overlay controller. A global hotkey arms the trigger, mouse-button polling detects the selected mouse button's state, and a timer handles the delay. The image is prepared ahead of display; DirectComposition controls its visibility and opacity. This is a desktop overlay with no game-specific integration.
 
 ## Limitations
 

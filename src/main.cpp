@@ -40,6 +40,9 @@ struct Hotkey {
     bool valid = true;
 };
 
+constexpr UINT kAlternateButtons[] = {VK_LBUTTON, VK_MBUTTON, VK_XBUTTON1, VK_XBUTTON2};
+constexpr const char* kAlternateButtonNames[] = {"Left mouse button", "Middle mouse button", "Mouse button 4 (X1)", "Mouse button 5 (X2)"};
+
 struct AppConfig {
     std::string image_path;
     std::string hotkey_text = "F8";
@@ -49,7 +52,17 @@ struct AppConfig {
     float anchor_x_pct = 57.5f;
     float anchor_y_pct = 37.5f;
     bool enabled = true;
+    bool custom_mouse_button = false;
+    int mouse_button = 0;
 };
+
+UINT trigger_button(const AppConfig& cfg) {
+    return cfg.custom_mouse_button ? kAlternateButtons[std::clamp(cfg.mouse_button, 0, 3)] : VK_RBUTTON;
+}
+
+const char* trigger_button_name(const AppConfig& cfg) {
+    return cfg.custom_mouse_button ? kAlternateButtonNames[std::clamp(cfg.mouse_button, 0, 3)] : "Right mouse button";
+}
 
 bool nearly_equal(float a, float b) {
     return std::fabs(a - b) < 0.01f;
@@ -63,7 +76,9 @@ bool same_config(const AppConfig& a, const AppConfig& b) {
            nearly_equal(a.opacity, b.opacity) &&
            nearly_equal(a.anchor_x_pct, b.anchor_x_pct) &&
            nearly_equal(a.anchor_y_pct, b.anchor_y_pct) &&
-           a.enabled == b.enabled;
+           a.enabled == b.enabled &&
+           a.custom_mouse_button == b.custom_mouse_button &&
+           a.mouse_button == b.mouse_button;
 }
 
 std::string trim(std::string s) {
@@ -215,6 +230,8 @@ void read_config(AppConfig* cfg) {
             else if (key == "opacity") cfg->opacity = std::stof(val);
             else if (key == "anchor_x_pct") cfg->anchor_x_pct = std::stof(val);
             else if (key == "anchor_y_pct") cfg->anchor_y_pct = std::stof(val);
+            else if (key == "custom_mouse_button") cfg->custom_mouse_button = (val == "1" || upper(val) == "TRUE");
+            else if (key == "mouse_button") cfg->mouse_button = std::clamp(std::stoi(val), 0, 3);
             else if (key == "enabled") cfg->enabled = (val == "1" || upper(val) == "TRUE");
         } catch (...) {
         }
@@ -231,6 +248,8 @@ void write_config(const AppConfig& cfg) {
     out << "opacity=" << cfg.opacity << "\n";
     out << "anchor_x_pct=" << cfg.anchor_x_pct << "\n";
     out << "anchor_y_pct=" << cfg.anchor_y_pct << "\n";
+    out << "custom_mouse_button=" << (cfg.custom_mouse_button ? 1 : 0) << "\n";
+    out << "mouse_button=" << cfg.mouse_button << "\n";
     out << "enabled=" << (cfg.enabled ? 1 : 0) << "\n";
 }
 
@@ -322,15 +341,16 @@ private:
             self->hide_overlay();
             return 0;
         case WM_HOTKEY:
-            if ((int)wp == kHotkeyId) self->toggle_right_click_trigger();
+            if ((int)wp == kHotkeyId) self->toggle_mouse_trigger();
             return 0;
         case WM_TIMER:
             if (wp == kShowTimer) {
+                if (!self->pending_show_) return 0;
                 KillTimer(hwnd, kShowTimer);
                 self->pending_show_ = false;
-                if (self->armed_ && self->right_button_down()) self->show_overlay();
+                if (self->armed_ && self->trigger_button_down()) self->show_overlay();
             } else if (wp == kMousePollTimer) {
-                self->poll_right_button();
+                self->poll_trigger_button();
             }
             return 0;
         case WM_CLOSE:
@@ -611,7 +631,13 @@ private:
 
         bool bitmap_settings_changed =
             !nearly_equal(active_config_.width_px, next.width_px);
+        const bool trigger_changed = trigger_button(active_config_) != trigger_button(next);
         active_config_ = next;
+        if (trigger_changed) {
+            hide_overlay();
+            // Require a fresh press after rebinding, including clicks in setup.
+            trigger_was_down_ = trigger_button_down();
+        }
         Hotkey hk = parse_hotkey(active_config_.hotkey_text);
         if (active_config_.enabled && hk.valid) {
             register_hotkey(hk);
@@ -620,7 +646,7 @@ private:
             unregister_hotkey();
             KillTimer(control_hwnd_.load(), kMousePollTimer);
             armed_ = false;
-            rbutton_was_down_ = false;
+            trigger_was_down_ = false;
             hide_overlay();
         }
 
@@ -642,7 +668,8 @@ private:
         if (!prime_overlay_surface()) return;
         std::ostringstream ss;
         ss << "Ready. " << active_config_.hotkey_text
-           << " toggles right-click trigger " << (armed_ ? "on" : "off") << ".";
+           << " toggles trigger " << (armed_ ? "on" : "off")
+           << ". Hold: " << trigger_button_name(active_config_) << ".";
         set_status(ss.str());
     }
 
@@ -666,45 +693,45 @@ private:
         }
     }
 
-    void toggle_right_click_trigger() {
+    void toggle_mouse_trigger() {
         if (!active_config_.enabled) return;
         armed_ = !armed_;
         if (!armed_) {
-            rbutton_was_down_ = right_button_down();
+            trigger_was_down_ = trigger_button_down();
             hide_overlay();
-            set_status("Right-click trigger off. Overlay will not show.");
+            set_status("Mouse trigger off. Overlay will not show.");
             return;
         }
-        rbutton_was_down_ = right_button_down();
+        trigger_was_down_ = trigger_button_down();
         last_foreground_hwnd_ = GetForegroundWindow();
         reassert_static_overlay();
-        set_status("Right-click trigger on. Hold right click to show after delay.");
-        if (rbutton_was_down_) begin_right_click_delay();
+        set_status(std::string("Trigger on. Hold ") + trigger_button_name(active_config_) + " to show after delay.");
+        if (trigger_was_down_) begin_trigger_delay();
     }
 
-    bool right_button_down() const {
-        return (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+    bool trigger_button_down() const {
+        return (GetAsyncKeyState(trigger_button(active_config_)) & 0x8000) != 0;
     }
 
-    void poll_right_button() {
+    void poll_trigger_button() {
         refresh_static_overlay_placement();
-        bool down = right_button_down();
+        bool down = trigger_button_down();
         if (!active_config_.enabled || !armed_) {
-            rbutton_was_down_ = down;
+            trigger_was_down_ = down;
             if (!armed_ && (visible_ || pending_show_)) hide_overlay();
             return;
         }
 
-        if (down && !rbutton_was_down_) {
-            rbutton_was_down_ = true;
-            begin_right_click_delay();
-        } else if (!down && rbutton_was_down_) {
-            rbutton_was_down_ = false;
+        if (down && !trigger_was_down_) {
+            trigger_was_down_ = true;
+            begin_trigger_delay();
+        } else if (!down && trigger_was_down_) {
+            trigger_was_down_ = false;
             hide_overlay();
         }
     }
 
-    void begin_right_click_delay() {
+    void begin_trigger_delay() {
         if (visible_ || pending_show_) return;
         int delay = std::max(0, (int)std::round(active_config_.delay_ms));
         if (delay == 0) {
@@ -712,7 +739,7 @@ private:
         } else {
             pending_show_ = true;
             SetTimer(control_hwnd_.load(), kShowTimer, (UINT)delay, nullptr);
-            set_status("Right click held. Waiting for delay...");
+            set_status(std::string(trigger_button_name(active_config_)) + " held. Waiting for delay...");
         }
     }
 
@@ -1051,7 +1078,7 @@ private:
     bool visible_ = false;
     bool pending_show_ = false;
     bool armed_ = false;
-    bool rbutton_was_down_ = false;
+    bool trigger_was_down_ = false;
     bool hotkey_registered_ = false;
     Hotkey registered_hotkey_;
 };
@@ -1105,7 +1132,7 @@ int main(int argc, char** argv) {
     ft::Config window{};
     window.title = "Soy Scope";
     window.width = 760;
-    window.height = 600;
+    window.height = 680;
     window.resizable = false;
     window.center_window = true;
     if (tui_mode) {
@@ -1135,11 +1162,17 @@ int main(int argc, char** argv) {
         ft::begin();
 
         ft::text("Soy Scope");
-        ft::text_wrapped("Transparent click-through overlay. Press the hotkey to arm it, then hold right click to show it after the configured delay.");
+        ft::text_wrapped("Transparent click-through overlay. Press the hotkey to arm it, then hold the selected mouse button to show it after the configured delay.");
         ft::separator();
 
         bool dirty = false;
-        dirty |= ft::checkbox("Enable hotkey/right-click trigger", &cfg.enabled);
+        dirty |= ft::checkbox("Enable hotkey/mouse trigger", &cfg.enabled);
+        dirty |= ft::checkbox("Use a different mouse button", &cfg.custom_mouse_button);
+        if (cfg.custom_mouse_button) {
+            dirty |= ft::dropdown("Trigger button", kAlternateButtonNames, 4, &cfg.mouse_button);
+        } else {
+            ft::text("Trigger button: Right mouse button");
+        }
 
         ft::set_next_fill();
         if (ft::input("Image path", image_path, sizeof(image_path))) {
