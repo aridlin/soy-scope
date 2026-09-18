@@ -1,3 +1,10 @@
+# Linux release 2026.09.18
+
+- Publish the KDE Plasma 6 Linux port with native Wayland layer-shell and X11 overlays.
+- Include GUI, terminal and local browser setup, persistent Windows-compatible INI settings and optional recorder marker forwarding.
+- Add Linux CMake installation, desktop integration with image-mask, marker-state and setup-control tests.
+- Refresh Windows' bundled FT with rendering, input, HTTP and widget fixes.
+
 # Changelog
 
 ## 2026.09.12

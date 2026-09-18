@@ -2,11 +2,11 @@
 
 <p align="center"><img src="assets/soyscope-icon.png" alt="Soy Scope icon" width="160"></p>
 
-A portable Windows overlay that puts the pointing soyjak's fingertip on your crosshair. Press **F8** to arm it, hold **right click** to show it after a short delay, and release right click to hide it. Enable **Use a different mouse button** in setup to use left click, middle click, or either side button instead.
+A Windows and KDE Linux overlay that puts the pointing soyjak's fingertip on your crosshair. Press **F8** to arm it, hold **right click** to show it after a short delay, and release right click to hide it. Enable **Use a different mouse button** in setup to use left click, middle click, or either side button instead.
 
 The overlay is transparent, click-through, and positioned relative to the center of your primary display. The image and application icon are embedded in the executable.
 
-[Download for Windows](https://github.com/aridlin/soy-scope/releases/latest) · [Report a bug](https://github.com/aridlin/soy-scope/issues)
+[Download releases](https://github.com/aridlin/soy-scope/releases/latest) · [Report a bug](https://github.com/aridlin/soy-scope/issues)
 
 ## Quick start
 
@@ -109,3 +109,12 @@ The setup interface sends settings to a separate overlay controller. A global ho
 `src/main.cpp` contains the app and overlay controller; `vendor/` contains FT; `resources/` embeds the image and icon from `assets/`.
 
 See [third-party notices](THIRD_PARTY_NOTICES.md). No project-wide license has been added; public availability alone does not grant a license to redistribute third-party artwork.
+
+
+## Linux / KDE Plasma 6
+
+A native Linux port is now included with GUI, TUI and local web setup, Wayland
+layer-shell and X11 overlays, persistent settings and optional recorder markers.
+See [Linux build, dependencies and usage](linux/README.md). Linux releases target
+Arch/CachyOS x86-64; other distributions can build from source. The Windows and
+Linux backends remain separate so their platform integrations stay intact.

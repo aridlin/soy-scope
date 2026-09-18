@@ -13,3 +13,9 @@ The supplied snapshot does not include a separate license notice for these heade
 ## Windows APIs
 
 The app links to Windows system libraries supplied by Microsoft. This repository does not include a Windows SDK or those system DLLs.
+
+## Linux runtime libraries
+
+The Linux port dynamically links system Qt 6, KDE Frameworks 6 and LayerShellQt
+libraries. These are supplied by the Linux distribution, not bundled into the
+release archive. Their own licenses and notices apply.

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Soy Scope
+Comment=Configurable pointing overlay
+Exec=soy-scope --ft-gui
+Icon=soy-scope
+Terminal=false
+Categories=Utility;
