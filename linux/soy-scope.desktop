@@ -6,3 +6,4 @@ Exec=soy-scope --ft-gui
 Icon=soy-scope
 Terminal=false
 Categories=Utility;
+StartupWMClass=soy-scope

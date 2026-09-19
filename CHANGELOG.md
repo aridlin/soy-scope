@@ -1,3 +1,11 @@
+# Linux FT release 2026.09.19
+
+- Replace the visible Linux Qt setup form with an FT desktop interface, retaining the KDE overlay/input controller and existing terminal/web setup.
+- Keep trigger, monitor, image, preview, alignment, recorder marker and save controls; isolate the FT frontend behind a toolkit-neutral controller interface.
+- Add a new vector reticle-and-pointers icon, including native X11 window metadata and KDE launcher integration.
+- Place setup on the primary XRandR monitor rather than the center of the combined desktop.
+- Verify Linux tests, shared input tests, FT rendering, control changes and saved configuration.
+
 # Linux release 2026.09.18
 
 - Publish the KDE Plasma 6 Linux port with native Wayland layer-shell and X11 overlays.

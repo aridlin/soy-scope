@@ -99,7 +99,7 @@ The setup interface sends settings to a separate overlay controller. A global ho
 
 ## Limitations
 
-- Windows only; the anchor targets the primary display.
+- The Windows overlay targets the primary display; Linux supports monitor selection.
 - Use a writable folder to save settings.
 - Exclusive fullscreen or an application's overlay restrictions may prevent a desktop overlay from appearing. Compatibility with individual games has not been verified.
 - CI checks compilation; it does not test physical mouse input, hotkeys, or visual alignment.
@@ -113,7 +113,7 @@ See [third-party notices](THIRD_PARTY_NOTICES.md). No project-wide license has b
 
 ## Linux / KDE Plasma 6
 
-A native Linux port is now included with GUI, TUI and local web setup, Wayland
+A native Linux port is included with FT desktop setup, TUI and local web setup, Wayland
 layer-shell and X11 overlays, persistent settings and optional recorder markers.
 See [Linux build, dependencies and usage](linux/README.md). Linux releases target
 Arch/CachyOS x86-64; other distributions can build from source. The Windows and

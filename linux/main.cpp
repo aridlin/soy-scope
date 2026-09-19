@@ -35,6 +35,7 @@
 #include <iostream>
 #include <QDesktopServices>
 #include "web.h"
+#include "ft_setup.h"
 
 // Same luminance-to-alpha treatment as the original Windows renderer.
 QImage inkMask(const QImage &source, double opacity) {
@@ -234,7 +235,7 @@ public:
         for(auto box:{alternate,markerEnabled,everyAim,manualEnabled})out<<box->objectName()<<"="<<(box->isChecked()?1:0)<<"\n";
         out<<"mouse_button="<<buttonChoice->currentIndex()<<"\nmedal_marker_key="<<manualEdit->text()<<"\nmedal_target_key="<<targetEdit->text()<<"\n";
     }
-    void terminalCommand(QString line) {
+    void terminalCommand(QString line, bool report = true) {
         auto words=line.trimmed().split(' ');QString cmd=words.takeFirst().toLower(),value=words.join(' ');if(cmd=="anchorx")cmd="anchorX";if(cmd=="anchory")cmd="anchorY";
         if(cmd=="quit")qApp->quit();
         else if(cmd=="arm")armed->setChecked(value!="0");
@@ -243,13 +244,27 @@ public:
         else if(cmd=="save"){settings.sync();exportIni();}
         else if(cmd=="browse")findChild<QPushButton*>("browse-image")->click();
         else if(cmd=="reset-anchor"){ax->setValue(57.5);ay->setValue(37.5);}
+        else if(cmd=="screen"){overlay.screenName=value;settings.setValue("screen",value);overlay.hide();overlay.place();}
         else if(cmd=="image"){QImage img(value=="embedded"?":/two-soyjaks-pointing.webp":value);if(!img.isNull()){overlay.image=img;overlay.rebuild();overlay.place();settings.setValue("image",value=="embedded"?"":value);}}
         else if(auto box=findChild<QCheckBox*>(cmd))box->setChecked(value=="1"||value=="true");
         else if(auto box=findChild<QDoubleSpinBox*>(cmd))box->setValue(value.toDouble());
         else if(cmd=="mouse_button")buttonChoice->setCurrentIndex(qBound(0,value.toInt(),3));
         else if(auto edit=findChild<QLineEdit*>(cmd)){edit->setText(value);settings.setValue(cmd,value);configureShortcuts();}
         else std::cout<<"Commands: arm 0/1, show, hide, image PATH/embedded, reset-anchor, save, quit; or SETTING VALUE. Settings: delay width opacity anchorX anchorY hotkey custom_mouse_button mouse_button medal_enabled medal_every_aim medal_separate_key medal_marker_key medal_target_key\n";
-        std::cout<<"Armed="<<armed->isChecked()<<" | "<<marker.status.toStdString()<<"\n> "<<std::flush;
+        if(report) std::cout<<"Armed="<<armed->isChecked()<<" | "<<marker.status.toStdString()<<"\n> "<<std::flush;
+    }
+    soy::SetupState setupState() const {
+        soy::SetupState result;
+        const auto state=webState();
+        for(auto it=state.begin();it!=state.end();++it) {
+            const auto value=it.value();
+            result[it.key().toStdString()]=value.isBool()?(value.toBool()?"true":"false"):value.isDouble()?QString::number(value.toDouble(),'g',12).toStdString():value.toString().toStdString();
+        }
+        result["screen"]=overlay.screenName.toStdString();
+        result["image"]=settings.value("image","embedded").toString().toStdString();
+        if(result["image"].empty())result["image"]="embedded";
+        result["input_status"]=status->text().toStdString();
+        return result;
     }
     QJsonObject webState() const {
         QJsonObject state{{"arm",armed->isChecked()},{"mouse_button",buttonChoice->currentIndex()},{"status",marker.status}};
@@ -308,5 +323,23 @@ int main(int argc,char **argv) {
             int newline;
             while((newline=pending->indexOf('\n'))>=0){auto line=pending->left(newline);pending->remove(0,newline+1);window.terminalCommand(QString::fromUtf8(line));}
         });
-    } else window.show();return app.exec();
+    } else {
+        app.setQuitOnLastWindowClosed(false);
+        soy::SetupBackend backend;
+        backend.state=[&]{return window.setupState();};
+        backend.command=[&](const std::string& command){window.terminalCommand(QString::fromStdString(command),false);};
+        const QImage icon=QImage(":/soyscope-icon.png").convertToFormat(QImage::Format_ARGB32);
+        backend.icon={uint32_t(icon.width()),uint32_t(icon.height())};
+        for(int y=0;y<icon.height();++y)for(int x=0;x<icon.width();++x)backend.icon.push_back(icon.pixel(x,y));
+        backend.screens.push_back("");
+        for(auto screen:QGuiApplication::screens())backend.screens.push_back(screen->name().toStdString());
+        if(!soy::openSetup(std::move(backend))){std::cerr<<"Cannot open FT setup window\n";return 1;}
+        QTimer frames;
+        QObject::connect(&frames,&QTimer::timeout,&app,[&]{if(!soy::drawSetup())app.quit();});
+        frames.start(16);
+        const int result=app.exec();
+        soy::closeSetup();
+        return result;
+    }
+    return app.exec();
 }

@@ -1,8 +1,7 @@
 # Soy Scope for KDE / Linux
 
-Native port of aridlin/soy-scope through the 2026.09.12 update. The original icon
-and image are embedded. Launch Soy Scope from the menu, or run `soy-scope --ft-tui`
-for terminal setup. `--ft-gui` opens the Qt setup window.
+Native port of aridlin/soy-scope through the 2026.09.12 update. The reticle icon and original overlay image are embedded. Launch Soy Scope from the menu, or run `soy-scope --ft-tui`
+for terminal setup. `--ft-gui` opens the FT setup window.
 
 Includes configurable toggle shortcut, right/left/middle/side mouse trigger,
 trigger delay, physical-pixel width, opacity, fingertip anchor, custom images,
@@ -43,13 +42,15 @@ and global shortcut registration.
 ## Dependencies and installation
 
 This port targets KDE Plasma 6 on Linux x86-64. It uses Qt 6 Widgets/Network,
-KGlobalAccel, KWindowSystem and LayerShellQt. The Linux UI currently uses Qt;
-the Windows UI uses FT. Source is built from the repository root.
+KGlobalAccel, KWindowSystem and LayerShellQt. The desktop setup UI uses FT on Linux and Windows. Linux retains Qt/KDE for
+the overlay, platform controller, image loading, global shortcuts and existing
+terminal/web setup interfaces. FT uses Cairo/X11 (XWayland on Wayland), with
+XRandR for placement on the primary monitor. Source is built from the repository root.
 
 Arch Linux / CachyOS build dependencies:
 
 ```sh
-sudo pacman -S --needed base-devel cmake python qt6-base qt6-imageformats kglobalaccel kwindowsystem layer-shell-qt
+sudo pacman -S --needed base-devel cmake python qt6-base qt6-imageformats cairo libx11 libxrandr kglobalaccel kwindowsystem layer-shell-qt
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local"
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
