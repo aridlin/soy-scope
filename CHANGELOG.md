@@ -1,3 +1,8 @@
+# Icon update 2026.10.21
+
+- Restore the original Windows application icon and use the same artwork for the Linux setup window and launcher.
+- Remove the Linux-only SVG override so icon themes display the matching PNG.
+
 # Linux FT release 2026.09.19
 
 - Replace the visible Linux Qt setup form with an FT desktop interface, retaining the KDE overlay/input controller and existing terminal/web setup.

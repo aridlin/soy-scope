@@ -1,6 +1,6 @@
 # Soy Scope for KDE / Linux
 
-Native port of aridlin/soy-scope through the 2026.09.12 update. The reticle icon and original overlay image are embedded. Launch Soy Scope from the menu, or run `soy-scope --ft-tui`
+Native port of aridlin/soy-scope through the 2026.09.12 update. The original Windows application icon and overlay image are embedded. Launch Soy Scope from the menu, or run `soy-scope --ft-tui`
 for terminal setup. `--ft-gui` opens the FT setup window.
 
 Includes configurable toggle shortcut, right/left/middle/side mouse trigger,

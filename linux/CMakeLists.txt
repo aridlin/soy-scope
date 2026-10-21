@@ -21,5 +21,3 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME setup-controls COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-controls.py $<TARGET_FILE:soy-scope>)
 install(FILES soy-scope.desktop DESTINATION share/applications)
 install(FILES ../assets/soyscope-icon.png DESTINATION share/icons/hicolor/256x256/apps RENAME soy-scope.png)
-
-install(FILES ../assets/soyscope-icon.svg DESTINATION share/icons/hicolor/scalable/apps RENAME soy-scope.svg)
