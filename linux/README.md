@@ -4,8 +4,11 @@ Native port of aridlin/soy-scope through the 2026.09.12 update. The original Win
 for terminal setup. `--ft-gui` opens the FT setup window.
 
 Includes configurable toggle shortcut, right/left/middle/side mouse trigger,
-trigger delay, physical-pixel width, opacity, fingertip anchor, custom images,
+hold or toggle mode, trigger delay, physical-pixel width, opacity, fingertip anchor, custom images,
 embedded-image reset, preview/hide, reset anchor, and persistent configuration.
+Enable **Toggle instead of hold** (TUI: `toggle_trigger 1`) to click once to show
+after the delay and again to hide/cancel; releasing the button keeps it active.
+Changing mode or disarming resets the overlay. The choice is saved in `toggle_trigger`.
 Changing triggers cancels the pending overlay and requires releasing the button.
 
 Optional recorder marker forwarding includes every-aim and separate-key modes,

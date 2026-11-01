@@ -38,6 +38,7 @@ The release includes launchers for both. The TUI changes the setup interface; th
 | --- | --- | --- |
 | Hotkey | `F8` | Toggle the selected mouse trigger |
 | Trigger button | Right mouse button | Check **Use a different mouse button** and select left, middle, X1, or X2 |
+| Toggle instead of hold | Off | Click once to show after the delay, click again to hide or cancel |
 | Delay | `250 ms` | Wait before showing the overlay |
 | Width | `1200 px` | Scale the overlay image |
 | Opacity | `0.72` | Set overlay transparency |
@@ -51,6 +52,8 @@ The release includes launchers for both. The TUI changes the setup interface; th
 - Hotkey examples: `F8`, `Ctrl+Alt+S`, `Shift+F9`. Choose another key if another app owns the hotkey.
 
 Unchecking **Use a different mouse button** restores right-click. Changing the trigger hides the overlay and cancels its pending delay; release and press the newly selected button to use it. The checkbox and button choice are saved with the other settings.
+
+Enable **Toggle instead of hold** to use the selected mouse button as an on/off switch. Releasing it keeps the overlay visible (or its delay running); a second press hides it immediately or cancels the delay. Changing the mode or trigger, or disarming, hides the overlay and cancels the delay. The option is saved as `toggle_trigger=1`; existing configurations keep hold mode. In toggle mode, release any held trigger after arming or changing settings before clicking again. This works in Windows setup and Linux GUI, TUI (`toggle_trigger 1`) and web setup.
 
 See [`soy-scope.example.ini`](soy-scope.example.ini) for the configuration format. Copy it to `soy-scope.ini` to configure the app by hand.
 
@@ -89,9 +92,10 @@ On Linux with Python 3 and a C++17 compiler:
 
 ```sh
 python3 tests/test_medal.py
+python3 tests/test_trigger.py
 ```
 
-These tests run the production configuration parser and Medal state machine against deterministic Win32 input stubs. They cover modes, persistence, shortcut conflicts, cancellation, held modifiers, key release, and input failures. GitHub Actions runs them alongside the native Windows build. They do not verify Medal receiving bookmarks or physical input.
+These tests run the production hold/toggle trigger methods, configuration parser and Medal state machine against deterministic Win32 input stubs. They cover modes, persistence, shortcut conflicts, cancellation, held modifiers, key release, and input failures. GitHub Actions runs them alongside the native Windows build. They do not verify Medal receiving bookmarks or physical input.
 
 ## How it works
 

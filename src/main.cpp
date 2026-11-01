@@ -53,6 +53,7 @@ struct AppConfig {
     float anchor_x_pct = 57.5f;
     float anchor_y_pct = 37.5f;
     bool enabled = true;
+    bool toggle_trigger = false;
     bool custom_mouse_button = false;
     int mouse_button = 0;
     bool medal_enabled = false;
@@ -83,6 +84,7 @@ bool same_config(const AppConfig& a, const AppConfig& b) {
            nearly_equal(a.anchor_x_pct, b.anchor_x_pct) &&
            nearly_equal(a.anchor_y_pct, b.anchor_y_pct) &&
            a.enabled == b.enabled &&
+           a.toggle_trigger == b.toggle_trigger &&
            a.custom_mouse_button == b.custom_mouse_button &&
            a.mouse_button == b.mouse_button &&
            a.medal_enabled == b.medal_enabled &&
@@ -373,6 +375,7 @@ void read_config(AppConfig* cfg) {
             else if (key == "opacity") cfg->opacity = std::stof(val);
             else if (key == "anchor_x_pct") cfg->anchor_x_pct = std::stof(val);
             else if (key == "anchor_y_pct") cfg->anchor_y_pct = std::stof(val);
+            else if (key == "toggle_trigger") cfg->toggle_trigger = (val == "1" || upper(val) == "TRUE");
             else if (key == "custom_mouse_button") cfg->custom_mouse_button = (val == "1" || upper(val) == "TRUE");
             else if (key == "mouse_button") cfg->mouse_button = std::clamp(std::stoi(val), 0, 3);
             else if (key == "medal_enabled") cfg->medal_enabled = (val == "1" || upper(val) == "TRUE");
@@ -396,6 +399,7 @@ void write_config(const AppConfig& cfg) {
     out << "opacity=" << cfg.opacity << "\n";
     out << "anchor_x_pct=" << cfg.anchor_x_pct << "\n";
     out << "anchor_y_pct=" << cfg.anchor_y_pct << "\n";
+    out << "toggle_trigger=" << (cfg.toggle_trigger ? 1 : 0) << "\n";
     out << "custom_mouse_button=" << (cfg.custom_mouse_button ? 1 : 0) << "\n";
     out << "mouse_button=" << cfg.mouse_button << "\n";
     out << "medal_enabled=" << (cfg.medal_enabled ? 1 : 0) << "\n";
@@ -506,7 +510,7 @@ private:
                 if (!self->pending_show_) return 0;
                 KillTimer(hwnd, kShowTimer);
                 self->pending_show_ = false;
-                if (self->armed_ && self->trigger_button_down()) self->show_overlay(true);
+                if (self->armed_ && (self->active_config_.toggle_trigger || self->trigger_button_down())) self->show_overlay(true);
             } else if (wp == kMousePollTimer) {
                 self->poll_trigger_button();
             } else if (wp == kMedalPollTimer) {
@@ -794,7 +798,8 @@ private:
 
         bool bitmap_settings_changed =
             !nearly_equal(active_config_.width_px, next.width_px);
-        const bool trigger_changed = trigger_button(active_config_) != trigger_button(next);
+        const bool trigger_changed = trigger_button(active_config_) != trigger_button(next) ||
+                                     active_config_.toggle_trigger != next.toggle_trigger;
         active_config_ = next;
         if (trigger_changed) {
             hide_overlay();
@@ -836,7 +841,7 @@ private:
         std::ostringstream ss;
         ss << "Ready. " << active_config_.hotkey_text
            << " toggles trigger " << (armed_ ? "on" : "off")
-           << ". Hold: " << trigger_button_name(active_config_) << ".";
+           << (active_config_.toggle_trigger ? ". Toggle: " : ". Hold: ") << trigger_button_name(active_config_) << ".";
         set_status(ss.str());
     }
 
@@ -872,8 +877,10 @@ private:
         trigger_was_down_ = trigger_button_down();
         last_foreground_hwnd_ = GetForegroundWindow();
         reassert_static_overlay();
-        set_status(std::string("Trigger on. Hold ") + trigger_button_name(active_config_) + " to show after delay.");
-        if (trigger_was_down_) begin_trigger_delay();
+        set_status(std::string(active_config_.toggle_trigger ? "Trigger on. Click " : "Trigger on. Hold ") +
+                   trigger_button_name(active_config_) +
+                   (active_config_.toggle_trigger ? " to toggle the overlay." : " to show after delay."));
+        if (trigger_was_down_ && !active_config_.toggle_trigger) begin_trigger_delay();
     }
 
     bool trigger_button_down() const {
@@ -891,10 +898,11 @@ private:
 
         if (down && !trigger_was_down_) {
             trigger_was_down_ = true;
-            begin_trigger_delay();
+            if (active_config_.toggle_trigger && (visible_ || pending_show_)) hide_overlay();
+            else begin_trigger_delay();
         } else if (!down && trigger_was_down_) {
             trigger_was_down_ = false;
-            hide_overlay();
+            if (!active_config_.toggle_trigger) hide_overlay();
         }
     }
 
@@ -906,7 +914,7 @@ private:
         } else {
             pending_show_ = true;
             SetTimer(control_hwnd_.load(), kShowTimer, (UINT)delay, nullptr);
-            set_status(std::string(trigger_button_name(active_config_)) + " held. Waiting for delay...");
+            set_status(std::string(trigger_button_name(active_config_)) + (active_config_.toggle_trigger ? " clicked. Waiting for delay..." : " held. Waiting for delay..."));
         }
     }
 
@@ -1342,11 +1350,12 @@ int main(int argc, char** argv) {
         ft::begin();
 
         ft::text("Soy Scope");
-        ft::text_wrapped("Transparent click-through overlay. Press the hotkey to arm it, then hold the selected mouse button to show it after the configured delay.");
+        ft::text_wrapped("Transparent click-through overlay. Press the hotkey to arm it, then use the selected mouse button to show it after the configured delay. Choose hold or toggle below.");
         ft::separator();
 
         bool dirty = false;
         dirty |= ft::checkbox("Enable hotkey/mouse trigger", &cfg.enabled);
+        dirty |= ft::checkbox("Toggle instead of hold", &cfg.toggle_trigger);
         dirty |= ft::checkbox("Use a different mouse button", &cfg.custom_mouse_button);
         if (cfg.custom_mouse_button) {
             dirty |= ft::dropdown("Trigger button", kAlternateButtonNames, 4, &cfg.mouse_button);
