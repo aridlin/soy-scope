@@ -20,6 +20,12 @@
 
 # Changelog
 
+## Unreleased
+
+- Add **Toggle instead of hold** for the selected mouse trigger on Windows and Linux, including Linux terminal/web setup.
+- Keep the configured delay on toggle-on; a second press hides the overlay or cancels a pending delay. Disarming or changing mode/button resets it.
+- Persist `toggle_trigger`, defaulting to hold for existing configurations.
+
 ## 2026.09.12
 
 - Added optional Medal shortcut forwarding: mark every aim, use a separate key, or enable both.

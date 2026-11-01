@@ -102,7 +102,7 @@ class Settings : public QWidget {
     MarkerOutput markerOutput;
     MarkerQueue marker;
     QElapsedTimer clock;
-    QCheckBox *alternate, *markerEnabled, *everyAim, *manualEnabled;
+    QCheckBox *toggleTrigger, *alternate, *markerEnabled, *everyAim, *manualEnabled;
     QComboBox *buttonChoice;
     QLineEdit *hotkeyEdit, *manualEdit, *targetEdit;
     QAction *toggleAction, *manualAction;
@@ -120,7 +120,7 @@ public:
     Settings() {
         setWindowTitle("Soy Scope — Linux");setWindowIcon(QIcon(":/soyscope-icon.png"));resize(520,680);clock.start();
         auto form=new QFormLayout(this);
-        auto intro=new QLabel("Hold right click to show the scope on your primary screen.\nUse the configurable toggle hotkey to arm it. The image is click-through.");
+        auto intro=new QLabel("Hold your trigger to show the scope, or enable toggle mode to click on/off.\nUse the configurable toggle hotkey to arm it. The image is click-through.");
         intro->setWordWrap(true);form->addRow(intro);
         armed=new QCheckBox("Armed");armed->setObjectName("armed");armed->setChecked(settings.value("armed",true).toBool());form->addRow(armed);
         auto spin=[&](const QString &label,const QString &key,double value,double maximum,auto changed){
@@ -148,10 +148,11 @@ public:
         connect(preview,&QPushButton::clicked,this,[&]{if(armed->isChecked()){overlay.place();overlay.show();}});
         auto hide=new QPushButton("Hide");form->addRow(hide);connect(hide,&QPushButton::clicked,this,[&]{delay.stop();overlay.hide();awaitRelease=anyDown();});
         auto resetAnchor=new QPushButton("Reset anchor");form->addRow(resetAnchor);connect(resetAnchor,&QPushButton::clicked,this,[&]{ax->setValue(57.5);ay->setValue(37.5);});
+        toggleTrigger=new QCheckBox("Toggle instead of hold");toggleTrigger->setObjectName("toggle_trigger");toggleTrigger->setChecked(settings.value("toggle_trigger",false).toBool());form->addRow(toggleTrigger);
         alternate=new QCheckBox("Use a different mouse button");alternate->setObjectName("custom_mouse_button");alternate->setChecked(settings.value("custom_mouse_button",false).toBool());form->addRow(alternate);
         buttonChoice=new QComboBox;buttonChoice->setObjectName("mouse_button");buttonChoice->addItems({"Left","Middle","Side X1","Side X2"});buttonChoice->setCurrentIndex(settings.value("mouse_button",0).toInt());form->addRow("Alternate button",buttonChoice);
-        auto updateTrigger=[&]{static int codes[]={BTN_LEFT,BTN_MIDDLE,BTN_SIDE,BTN_EXTRA};trigger=alternate->isChecked()?codes[qBound(0,buttonChoice->currentIndex(),3)]:BTN_RIGHT;buttonChoice->setEnabled(alternate->isChecked());settings.setValue("custom_mouse_button",alternate->isChecked());settings.setValue("mouse_button",buttonChoice->currentIndex());delay.stop();overlay.hide();wasDown=anyDown();awaitRelease=wasDown;};
-        connect(alternate,&QCheckBox::toggled,this,updateTrigger);connect(buttonChoice,&QComboBox::currentIndexChanged,this,updateTrigger);updateTrigger();
+        auto updateTrigger=[&]{static int codes[]={BTN_LEFT,BTN_MIDDLE,BTN_SIDE,BTN_EXTRA};trigger=alternate->isChecked()?codes[qBound(0,buttonChoice->currentIndex(),3)]:BTN_RIGHT;buttonChoice->setEnabled(alternate->isChecked());settings.setValue("toggle_trigger",toggleTrigger->isChecked());settings.setValue("custom_mouse_button",alternate->isChecked());settings.setValue("mouse_button",buttonChoice->currentIndex());delay.stop();overlay.hide();wasDown=anyDown();awaitRelease=wasDown;};
+        connect(toggleTrigger,&QCheckBox::toggled,this,updateTrigger);connect(alternate,&QCheckBox::toggled,this,updateTrigger);connect(buttonChoice,&QComboBox::currentIndexChanged,this,updateTrigger);updateTrigger();
         auto textSetting=[&](const QString& name,const QString& label,const QString& value){auto edit=new QLineEdit(settings.value(name,value).toString());edit->setObjectName(name);form->addRow(label,edit);return edit;};
         hotkeyEdit=textSetting("hotkey","Toggle shortcut","F8");
         markerEnabled=new QCheckBox("Enable Medal / recorder markers");markerEnabled->setObjectName("medal_enabled");markerEnabled->setChecked(settings.value("medal_enabled",false).toBool());form->addRow(markerEnabled);
@@ -163,8 +164,8 @@ public:
         auto save=new QPushButton("Save config");form->addRow(save);connect(save,&QPushButton::clicked,this,[&]{settings.sync();exportIni();});
         status=new QLabel;status->setWordWrap(true);form->addRow(status);
         delay.setSingleShot(true);
-        connect(&delay,&QTimer::timeout,this,[&]{if(armed->isChecked()&&anyDown()&&!awaitRelease){overlay.place();overlay.show();if(markerEnabled->isChecked()&&everyAim->isChecked()&&hotkeysValid)marker.request(clock.elapsed());}});
-        connect(armed,&QCheckBox::toggled,this,[&](bool enabled){settings.setValue("armed",enabled);delay.stop();overlay.hide();wasDown=false;});
+        connect(&delay,&QTimer::timeout,this,[&]{if(armed->isChecked()&&(toggleTrigger->isChecked()||anyDown())&&!awaitRelease){overlay.place();overlay.show();if(markerEnabled->isChecked()&&everyAim->isChecked()&&hotkeysValid)marker.request(clock.elapsed());}});
+        connect(armed,&QCheckBox::toggled,this,[&](bool enabled){settings.setValue("armed",enabled);delay.stop();overlay.hide();wasDown=anyDown();awaitRelease=wasDown;});
         toggleAction=new QAction(this);toggleAction->setObjectName("toggle-soycope");toggleAction->setText("Arm/disarm Soy Scope");toggleAction->setAutoRepeat(false);
         manualAction=new QAction(this);manualAction->setObjectName("marker-soycope");manualAction->setText("Soy Scope recorder marker");manualAction->setAutoRepeat(false);
         connect(toggleAction,&QAction::triggered,this,[&]{if(!toggleLatch){toggleLatch=true;armed->toggle();}});
@@ -181,8 +182,12 @@ public:
     void changed() {
         bool down=anyDown();
         if(!down)awaitRelease=false;
-        if(down && !wasDown && !awaitRelease && armed->isChecked())delay.start();
-        if(!down){delay.stop();overlay.hide();}
+        if(down && !wasDown && !awaitRelease && armed->isChecked()) {
+            if(toggleTrigger->isChecked() && (delay.isActive() || overlay.isVisible())) {
+                delay.stop();overlay.hide();
+            } else delay.start();
+        }
+        if(!down && !toggleTrigger->isChecked()){delay.stop();overlay.hide();}
         wasDown=down;
     }
     void scanDevices() {
@@ -232,7 +237,7 @@ public:
     void exportIni() {
         QFile file(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/soy-scope.ini");if(!file.open(QIODevice::WriteOnly|QIODevice::Truncate))return;QTextStream out(&file);
         out<<"image_path="<<(settings.value("image").toString().isEmpty()?QString("embedded://two-soyjaks-pointing"):settings.value("image").toString())<<"\nhotkey="<<hotkeyEdit->text()<<"\ndelay_ms="<<delay.interval()<<"\nwidth_px="<<overlay.width<<"\nopacity="<<overlay.alpha<<"\nanchor_x_pct="<<overlay.anchorX*100<<"\nanchor_y_pct="<<overlay.anchorY*100<<"\nenabled="<<(armed->isChecked()?1:0)<<"\n";
-        for(auto box:{alternate,markerEnabled,everyAim,manualEnabled})out<<box->objectName()<<"="<<(box->isChecked()?1:0)<<"\n";
+        for(auto box:{toggleTrigger,alternate,markerEnabled,everyAim,manualEnabled})out<<box->objectName()<<"="<<(box->isChecked()?1:0)<<"\n";
         out<<"mouse_button="<<buttonChoice->currentIndex()<<"\nmedal_marker_key="<<manualEdit->text()<<"\nmedal_target_key="<<targetEdit->text()<<"\n";
     }
     void terminalCommand(QString line, bool report = true) {
@@ -250,7 +255,7 @@ public:
         else if(auto box=findChild<QDoubleSpinBox*>(cmd))box->setValue(value.toDouble());
         else if(cmd=="mouse_button")buttonChoice->setCurrentIndex(qBound(0,value.toInt(),3));
         else if(auto edit=findChild<QLineEdit*>(cmd)){edit->setText(value);settings.setValue(cmd,value);configureShortcuts();}
-        else std::cout<<"Commands: arm 0/1, show, hide, image PATH/embedded, reset-anchor, save, quit; or SETTING VALUE. Settings: delay width opacity anchorX anchorY hotkey custom_mouse_button mouse_button medal_enabled medal_every_aim medal_separate_key medal_marker_key medal_target_key\n";
+        else std::cout<<"Commands: arm 0/1, show, hide, image PATH/embedded, reset-anchor, save, quit; or SETTING VALUE. Settings: delay width opacity anchorX anchorY hotkey toggle_trigger custom_mouse_button mouse_button medal_enabled medal_every_aim medal_separate_key medal_marker_key medal_target_key\n";
         if(report) std::cout<<"Armed="<<armed->isChecked()<<" | "<<marker.status.toStdString()<<"\n> "<<std::flush;
     }
     soy::SetupState setupState() const {
@@ -299,7 +304,7 @@ int main(int argc,char **argv) {
     int configArg=app.arguments().indexOf("--config");if(configArg>=0&&configArg+1<app.arguments().size())ini=app.arguments()[configArg+1];
     if(QFileInfo::exists(ini)){
         QSettings input(ini,QSettings::IniFormat),dest;
-        const std::map<QString,QString> names={{"image_path","image"},{"hotkey","hotkey"},{"delay_ms","delay"},{"width_px","width"},{"anchor_x_pct","anchorX"},{"anchor_y_pct","anchorY"},{"enabled","armed"},{"custom_mouse_button","custom_mouse_button"},{"mouse_button","mouse_button"},{"medal_enabled","medal_enabled"},{"medal_every_aim","medal_every_aim"},{"medal_separate_key","medal_separate_key"},{"medal_marker_key","medal_marker_key"},{"medal_target_key","medal_target_key"}};
+        const std::map<QString,QString> names={{"image_path","image"},{"hotkey","hotkey"},{"delay_ms","delay"},{"width_px","width"},{"anchor_x_pct","anchorX"},{"anchor_y_pct","anchorY"},{"enabled","armed"},{"toggle_trigger","toggle_trigger"},{"custom_mouse_button","custom_mouse_button"},{"mouse_button","mouse_button"},{"medal_enabled","medal_enabled"},{"medal_every_aim","medal_every_aim"},{"medal_separate_key","medal_separate_key"},{"medal_marker_key","medal_marker_key"},{"medal_target_key","medal_target_key"}};
         for(const auto &[from,to]:names)if(input.contains(from))dest.setValue(to,input.value(from));
         if(input.contains("opacity"))dest.setValue("opacity",input.value("opacity").toDouble()*100);
         if(dest.value("image").toString().startsWith("embedded://"))dest.remove("image");

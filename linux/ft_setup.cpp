@@ -96,10 +96,11 @@ bool drawSetup() {
     auto state = backend.state();
     ft::begin();
     ft::text("Soy Scope");
-    ft::text_wrapped("Arm the scope, then hold your trigger button. The pointing image stays transparent and click-through.");
+    ft::text_wrapped("Arm the scope, then hold your trigger button or enable toggle mode to click on/off. The pointing image stays transparent and click-through.");
     ft::separator();
     ft::scroll_area("Scope settings", 430, [&] {
         checkbox("Armed", "armed", state);
+        checkbox("Toggle instead of hold", "toggle_trigger", state);
         checkbox("Use a different mouse button", "custom_mouse_button", state);
         if (state.at("custom_mouse_button") == "true") {
             const char* buttons[] = {"Left", "Middle", "Side X1", "Side X2"};

@@ -5,6 +5,7 @@ Run: python3 tests/test_medal.py (requires a C++17 compiler).
 from pathlib import Path
 import os
 import subprocess
+import sys
 import tempfile
 
 source = (Path(__file__).resolve().parents[1] / 'src/main.cpp').read_text()
@@ -52,7 +53,10 @@ int main() {
  // Disabled defaults and old INI files never send input.
  { MedalMarkers m; m.configure(cfg); m.aim(); m.tick(); assert(events.empty()); }
  { std::ofstream f(config_path()); f << "hotkey=F8\n"; }
- AppConfig old; read_config(&old); assert(!old.medal_enabled);
+ AppConfig old; read_config(&old); assert(!old.medal_enabled && !old.toggle_trigger);
+ cfg.toggle_trigger=true; assert(!same_config(cfg,old));
+ write_config(cfg); AppConfig toggled; read_config(&toggled); assert(toggled.toggle_trigger && same_config(cfg,toggled));
+ cfg.toggle_trigger=false; write_config(cfg); AppConfig held; read_config(&held); assert(!held.toggle_trigger);
  // Persist both independent modes and custom shortcuts.
  cfg.medal_enabled=true; cfg.medal_separate_key=true;
  cfg.medal_marker_key="Ctrl+F9"; cfg.medal_target_key="Alt+F10";
@@ -119,3 +123,6 @@ with tempfile.TemporaryDirectory(prefix='soyscope-medal-test-') as directory:
     (root / 'test.cpp').write_text(stubs + logic + config_io + tests)
     subprocess.run([os.environ.get('CXX', 'g++'), '-std=c++17', '-Wall', '-Wextra', '-Werror', str(root / 'test.cpp'), '-o', str(root / 'test')], check=True)
     subprocess.run([str(root / 'test')], cwd=root, check=True)
+
+# Keep the trigger regression suite in the existing CI input-test entry point.
+subprocess.run([sys.executable, str(Path(__file__).with_name("test_trigger.py"))], check=True)
