@@ -1,0 +1,17 @@
+{
+  "snapshot": "2026-11-10",
+  "project": "soy-scope",
+  "status": "prerelease local-work snapshot",
+  "artifacts": [
+    {
+      "path": "build-release/linux/soy-scope",
+      "size": 1329728,
+      "sha256": "ffe2c695868cd6c10ebc74265d1bcd4695576cea48a3d78048b3bf1bdc84f632"
+    }
+  ],
+  "checks": [],
+  "notes": [
+    "Linux CMake Release build and all 4 CTest checks passed, including setup HTTP controls outside socket-restricted sandbox."
+  ],
+  "runtime": "Linux x86_64 dynamic system libraries for ELF binaries; .exe cross-compiled Windows x64; APK preview/debug; OXT platform independent. Source/API compatibility and hardware behavior are not implied by compilation."
+}
