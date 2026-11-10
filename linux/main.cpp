@@ -110,7 +110,7 @@ class Settings : public QWidget {
     bool hotkeysValid=false, awaitRelease=false, manualLatch=false, toggleLatch=false;
     int trigger=BTN_RIGHT;
     QDoubleSpinBox *ax=nullptr,*ay=nullptr;
-    QTimer previewTimer;
+    QCheckBox *preview;
     QCheckBox *armed;
     QLabel *status;
     struct Device {int fd; QSocketNotifier *notifier; QSet<int> down;};
@@ -143,16 +143,16 @@ public:
         overlay.screenName=settings.value("screen", "DP-2").toString();
         monitorChoice->setCurrentText(overlay.screenName);
         form->addRow("Overlay monitor",monitorChoice);
-        connect(monitorChoice,&QComboBox::currentTextChanged,this,[&](const QString &name){overlay.screenName=name;settings.setValue("screen",name);overlay.hide();overlay.place();});
-        auto preview=new QPushButton("Show if armed");form->addRow(preview);
-        connect(preview,&QPushButton::clicked,this,[&]{if(armed->isChecked()){overlay.place();overlay.show();}});
-        auto hide=new QPushButton("Hide");form->addRow(hide);connect(hide,&QPushButton::clicked,this,[&]{delay.stop();overlay.hide();awaitRelease=anyDown();});
+        connect(monitorChoice,&QComboBox::currentTextChanged,this,[&](const QString &name){overlay.screenName=name;settings.setValue("screen",name);overlay.hide();overlay.place();if(preview->isChecked())overlay.show();});
+        preview=new QCheckBox("Show if armed");preview->setObjectName("preview");form->addRow(preview);
+        connect(preview,&QCheckBox::toggled,this,[&](bool enabled){delay.stop();awaitRelease=anyDown();if(enabled&&!armed->isChecked()){preview->setChecked(false);return;}if(enabled){overlay.place();overlay.show();}else overlay.hide();});
+        auto hide=new QPushButton("Hide");form->addRow(hide);connect(hide,&QPushButton::clicked,this,[&]{preview->setChecked(false);delay.stop();overlay.hide();awaitRelease=anyDown();});
         auto resetAnchor=new QPushButton("Reset anchor");form->addRow(resetAnchor);connect(resetAnchor,&QPushButton::clicked,this,[&]{ax->setValue(57.5);ay->setValue(37.5);});
         toggleTrigger=new QCheckBox("Toggle instead of hold");toggleTrigger->setObjectName("toggle_trigger");toggleTrigger->setChecked(settings.value("toggle_trigger",false).toBool());form->addRow(toggleTrigger);
         alternate=new QCheckBox("Use a different mouse button");alternate->setObjectName("custom_mouse_button");alternate->setChecked(settings.value("custom_mouse_button",false).toBool());form->addRow(alternate);
         buttonChoice=new QComboBox;buttonChoice->setObjectName("mouse_button");buttonChoice->addItems({"Left","Middle","Side X1","Side X2"});buttonChoice->setCurrentIndex(settings.value("mouse_button",0).toInt());form->addRow("Alternate button",buttonChoice);
-        auto updateTrigger=[&]{static int codes[]={BTN_LEFT,BTN_MIDDLE,BTN_SIDE,BTN_EXTRA};trigger=alternate->isChecked()?codes[qBound(0,buttonChoice->currentIndex(),3)]:BTN_RIGHT;buttonChoice->setEnabled(alternate->isChecked());settings.setValue("toggle_trigger",toggleTrigger->isChecked());settings.setValue("custom_mouse_button",alternate->isChecked());settings.setValue("mouse_button",buttonChoice->currentIndex());delay.stop();overlay.hide();wasDown=anyDown();awaitRelease=wasDown;};
-        connect(toggleTrigger,&QCheckBox::toggled,this,updateTrigger);connect(alternate,&QCheckBox::toggled,this,updateTrigger);connect(buttonChoice,&QComboBox::currentIndexChanged,this,updateTrigger);updateTrigger();
+        auto updateTrigger=[&]{static int codes[]={BTN_LEFT,BTN_MIDDLE,BTN_SIDE,BTN_EXTRA};trigger=alternate->isChecked()?codes[qBound(0,buttonChoice->currentIndex(),3)]:BTN_RIGHT;buttonChoice->setEnabled(alternate->isChecked());settings.setValue("toggle_trigger",toggleTrigger->isChecked());settings.setValue("custom_mouse_button",alternate->isChecked());settings.setValue("mouse_button",buttonChoice->currentIndex());delay.stop();if(!preview->isChecked())overlay.hide();wasDown=anyDown();awaitRelease=wasDown;};
+        connect(toggleTrigger,&QCheckBox::toggled,this,[this,updateTrigger]{preview->setChecked(false);updateTrigger();});connect(alternate,&QCheckBox::toggled,this,updateTrigger);connect(buttonChoice,&QComboBox::currentIndexChanged,this,updateTrigger);updateTrigger();
         auto textSetting=[&](const QString& name,const QString& label,const QString& value){auto edit=new QLineEdit(settings.value(name,value).toString());edit->setObjectName(name);form->addRow(label,edit);return edit;};
         hotkeyEdit=textSetting("hotkey","Toggle shortcut","F8");
         markerEnabled=new QCheckBox("Enable Medal / recorder markers");markerEnabled->setObjectName("medal_enabled");markerEnabled->setChecked(settings.value("medal_enabled",false).toBool());form->addRow(markerEnabled);
@@ -164,8 +164,8 @@ public:
         auto save=new QPushButton("Save config");form->addRow(save);connect(save,&QPushButton::clicked,this,[&]{settings.sync();exportIni();});
         status=new QLabel;status->setWordWrap(true);form->addRow(status);
         delay.setSingleShot(true);
-        connect(&delay,&QTimer::timeout,this,[&]{if(armed->isChecked()&&(toggleTrigger->isChecked()||anyDown())&&!awaitRelease){overlay.place();overlay.show();if(markerEnabled->isChecked()&&everyAim->isChecked()&&hotkeysValid)marker.request(clock.elapsed());}});
-        connect(armed,&QCheckBox::toggled,this,[&](bool enabled){settings.setValue("armed",enabled);delay.stop();overlay.hide();wasDown=anyDown();awaitRelease=wasDown;});
+        connect(&delay,&QTimer::timeout,this,[&]{if(!preview->isChecked()&&armed->isChecked()&&(toggleTrigger->isChecked()||anyDown())&&!awaitRelease){overlay.place();overlay.show();if(markerEnabled->isChecked()&&everyAim->isChecked()&&hotkeysValid)marker.request(clock.elapsed());}});
+        connect(armed,&QCheckBox::toggled,this,[&](bool enabled){settings.setValue("armed",enabled);delay.stop();if(!enabled)preview->setChecked(false);overlay.hide();wasDown=anyDown();awaitRelease=wasDown;});
         toggleAction=new QAction(this);toggleAction->setObjectName("toggle-soycope");toggleAction->setText("Arm/disarm Soy Scope");toggleAction->setAutoRepeat(false);
         manualAction=new QAction(this);manualAction->setObjectName("marker-soycope");manualAction->setText("Soy Scope recorder marker");manualAction->setAutoRepeat(false);
         connect(toggleAction,&QAction::triggered,this,[&]{if(!toggleLatch){toggleLatch=true;armed->toggle();}});
@@ -179,9 +179,10 @@ public:
     }
     ~Settings() override {marker.cancel();settings.sync();exportIni();for(auto &[name,d]:devices){delete d.notifier;::close(d.fd);}}
     bool anyDown() const {for(const auto &[name,d]:devices)if(d.down.contains(trigger))return true;return false;}
-    void changed() {
-        bool down=anyDown();
+    void changed() { triggerChanged(anyDown()); }
+    void triggerChanged(bool down) {
         if(!down)awaitRelease=false;
+        if(preview->isChecked()){wasDown=down;return;}
         if(down && !wasDown && !awaitRelease && armed->isChecked()) {
             if(toggleTrigger->isChecked() && (delay.isActive() || overlay.isVisible())) {
                 delay.stop();overlay.hide();
@@ -244,18 +245,18 @@ public:
         auto words=line.trimmed().split(' ');QString cmd=words.takeFirst().toLower(),value=words.join(' ');if(cmd=="anchorx")cmd="anchorX";if(cmd=="anchory")cmd="anchorY";
         if(cmd=="quit")qApp->quit();
         else if(cmd=="arm")armed->setChecked(value!="0");
-        else if(cmd=="show"){if(armed->isChecked()){overlay.place();overlay.show();}}
-        else if(cmd=="hide"){overlay.hide();delay.stop();awaitRelease=anyDown();}
+        else if(cmd=="show")preview->setChecked(!preview->isChecked());
+        else if(cmd=="hide"){preview->setChecked(false);overlay.hide();delay.stop();awaitRelease=anyDown();}
         else if(cmd=="save"){settings.sync();exportIni();}
         else if(cmd=="browse")findChild<QPushButton*>("browse-image")->click();
         else if(cmd=="reset-anchor"){ax->setValue(57.5);ay->setValue(37.5);}
-        else if(cmd=="screen"){overlay.screenName=value;settings.setValue("screen",value);overlay.hide();overlay.place();}
+        else if(cmd=="screen"){overlay.screenName=value;settings.setValue("screen",value);overlay.hide();overlay.place();if(preview->isChecked())overlay.show();}
         else if(cmd=="image"){QImage img(value=="embedded"?":/two-soyjaks-pointing.webp":value);if(!img.isNull()){overlay.image=img;overlay.rebuild();overlay.place();settings.setValue("image",value=="embedded"?"":value);}}
         else if(auto box=findChild<QCheckBox*>(cmd))box->setChecked(value=="1"||value=="true");
         else if(auto box=findChild<QDoubleSpinBox*>(cmd))box->setValue(value.toDouble());
         else if(cmd=="mouse_button")buttonChoice->setCurrentIndex(qBound(0,value.toInt(),3));
         else if(auto edit=findChild<QLineEdit*>(cmd)){edit->setText(value);settings.setValue(cmd,value);configureShortcuts();}
-        else std::cout<<"Commands: arm 0/1, show, hide, image PATH/embedded, reset-anchor, save, quit; or SETTING VALUE. Settings: delay width opacity anchorX anchorY hotkey toggle_trigger custom_mouse_button mouse_button medal_enabled medal_every_aim medal_separate_key medal_marker_key medal_target_key\n";
+        else std::cout<<"Commands: arm 0/1, show (toggle preview), preview 0/1, hide, image PATH/embedded, reset-anchor, save, quit; or SETTING VALUE. Settings: delay width opacity anchorX anchorY hotkey toggle_trigger custom_mouse_button mouse_button medal_enabled medal_every_aim medal_separate_key medal_marker_key medal_target_key\n";
         if(report) std::cout<<"Armed="<<armed->isChecked()<<" | "<<marker.status.toStdString()<<"\n> "<<std::flush;
     }
     soy::SetupState setupState() const {
@@ -270,6 +271,33 @@ public:
         if(result["image"].empty())result["image"]="embedded";
         result["input_status"]=status->text().toStdString();
         return result;
+    }
+    int testPreview() {
+        armed->setChecked(true);
+        terminalCommand("preview 1",false);
+        if(!preview->isChecked()||!overlay.isVisible())return 1;
+        for(bool down:{false,true,false,true,false}) {
+            triggerChanged(down);
+            if(!overlay.isVisible()||delay.isActive())return 2;
+        }
+        terminalCommand("show",false);
+        if(preview->isChecked()||overlay.isVisible())return 3;
+        terminalCommand("show",false);
+        terminalCommand("hide",false);
+        if(preview->isChecked()||overlay.isVisible())return 4;
+        terminalCommand("show",false);
+        armed->setChecked(false);
+        if(preview->isChecked()||overlay.isVisible())return 5;
+        terminalCommand("show",false);
+        if(preview->isChecked()||overlay.isVisible())return 9;
+        armed->setChecked(true);
+        if(overlay.isVisible())return 6;
+        triggerChanged(true);
+        if(!delay.isActive())return 7;
+        triggerChanged(false);
+        if(delay.isActive()||overlay.isVisible())return 8;
+        std::cout<<"PASS: preview survives mouse presses/releases, toggles off, Hide/disarm clear it, normal trigger delay still works\n";
+        return 0;
     }
     QJsonObject webState() const {
         QJsonObject state{{"arm",armed->isChecked()},{"mouse_button",buttonChoice->currentIndex()},{"status",marker.status}};
@@ -310,6 +338,7 @@ int main(int argc,char **argv) {
         if(dest.value("image").toString().startsWith("embedded://"))dest.remove("image");
     }
     Settings window;
+    if(testing&&app.arguments().contains("--test-preview"))return window.testPreview();
     WebSetup web;
     if(app.arguments().contains("--ft-web")||app.arguments().contains("--web")) {
         web.state=[&]{return window.webState();};web.command=[&](QString command){window.terminalCommand(command);};

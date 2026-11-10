@@ -53,12 +53,12 @@ struct Check { bool value=false; bool isChecked() const { return value; } };
 struct Timer { bool active=false; int starts=0; void start(){active=true;++starts;} void stop(){active=false;} bool isActive() const{return active;} };
 struct Image { bool visible=false; void hide(){visible=false;} bool isVisible()const{return visible;} };
 struct Linux {
-    Check mode, arm{true}; Check *toggleTrigger=&mode, *armed=&arm;
+    Check mode, arm{true}, previewState; Check *toggleTrigger=&mode, *armed=&arm, *preview=&previewState;
     Timer delay; Image overlay;
     bool down=false, wasDown=false, awaitRelease=false;
     bool anyDown() const{return down;}
 '''
-code += method(linux, '    void changed()')
+code += method(linux, '    void changed()') + method(linux, '    void triggerChanged(bool down)')
 condition = linux.split('connect(&delay,&QTimer::timeout,this,[&]{if(', 1)[1].split('){overlay.place();', 1)[0]
 code += '\nvoid expire() { if (!delay.active) return; delay.stop(); if (' + condition + ') overlay.visible=true; }\n};\n'
 code += r'''

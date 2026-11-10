@@ -9,6 +9,9 @@ embedded-image reset, preview/hide, reset anchor, and persistent configuration.
 Enable **Toggle instead of hold** (TUI: `toggle_trigger 1`) to click once to show
 after the delay and again to hide/cancel; releasing the button keeps it active.
 Changing mode or disarming resets the overlay. The choice is saved in `toggle_trigger`.
+**Show if armed** is a preview toggle: mouse clicks and releases keep the image visible.
+Turn it off, press **Hide**, or disarm to end the preview. Preview is cleared when
+disarmed and starts off each launch.
 Changing triggers cancels the pending overlay and requires releasing the button.
 
 Optional recorder marker forwarding includes every-aim and separate-key modes,
@@ -69,3 +72,7 @@ Preview and setup work without device permissions. Automatic trigger detection
 requires read access to the relevant `/dev/input/event*` devices; optional marker
 forwarding requires write access to `/dev/uinput`. Permissions are managed by the
 OS/session administrator; the app does not grant itself access or grab devices.
+
+## FT deep themes
+
+The native FT setup uses the updated library. Click outside a text field, press `:`, then enter `deep-theme paper-ink`, `deep-theme paper-ink-magenta`, or `deep-theme standard`. Tab completes a theme name. This changes presentation for the current session; existing overlay settings are preserved. SoyScope's separate Qt web setup and terminal controls retain their existing renderers.

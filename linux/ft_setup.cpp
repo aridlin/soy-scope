@@ -157,7 +157,7 @@ bool drawSetup() {
     });
     ft::separator();
     ft::row({1, 1, 1}, [&] {
-        if (ft::button("Show if armed", ft::ColorRole::Accent)) send("show");
+        checkbox("Show if armed", "preview", state);
         if (ft::button("Hide")) send("hide");
         if (ft::button("Save config", ft::ColorRole::Success)) { send("save"); feedback = "Configuration saved"; }
     });
